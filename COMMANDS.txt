@@ -1,0 +1,25 @@
+Car Service Center - commands to run the project
+================================================
+Requires: .NET 8 SDK
+Run all commands from this folder (the one containing CarServiceCreational.sln).
+
+Check the SDK is installed:
+    dotnet --version
+
+Restore dependencies:
+    dotnet restore
+
+Build the solution (app + tests):
+    dotnet build
+
+Run the application:
+    dotnet run --project CarServiceCreational
+
+Run the unit tests:
+    dotnet test
+
+Run the tests with detailed output:
+    dotnet test --logger "console;verbosity=detailed"
+
+Clean build output (bin/ and obj/):
+    dotnet clean
