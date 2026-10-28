@@ -4,6 +4,7 @@ using CarServiceCreational.Domain.Factory.ServiceCreators;
 using CarServiceCreational.Domain.Models;
 using CarServiceCreational.Domain.Models.Parts;
 using CarServiceCreational.Domain.Models.Services;
+using CarServiceCreational.Domain.Pool;
 using CarServiceCreational.Domain.Prototype;
 using CarServiceCreational.Domain.Registry;
 
@@ -128,5 +129,58 @@ public class CreationalPatternsTests
         var builder = new ServiceOrderBuilder().ForVehicle(Logan);
 
         Assert.Throws<InvalidOperationException>(() => builder.Build());
+    }
+
+    [Fact]
+    public void ObjectPool_HasThreeBaysByDefault()
+    {
+        var pool = new RepairBayPool();
+
+        Assert.Equal(3, pool.Capacity);
+        Assert.Equal(3, pool.FreeBays);
+    }
+
+    [Fact]
+    public void ObjectPool_FourthCarWaitsUntilABayIsReleased()
+    {
+        var pool = new RepairBayPool();
+        var first = pool.Acquire(Logan);
+        pool.Acquire(Logan);
+        pool.Acquire(Logan);
+
+        var waiting = pool.AcquireAsync(Logan);
+        Assert.False(waiting.IsCompleted);
+        Assert.Equal(0, pool.FreeBays);
+
+        pool.Release(first);
+
+        Assert.True(waiting.Wait(TimeSpan.FromSeconds(1)));
+        Assert.Same(first, waiting.Result);
+    }
+
+    [Fact]
+    public void ObjectPool_ReleasedBayIsReusedAndReset()
+    {
+        var pool = new RepairBayPool(capacity: 1);
+        var bay = pool.Acquire(Logan);
+        Assert.Same(Logan, bay.CurrentVehicle);
+
+        pool.Release(bay);
+
+        Assert.False(bay.IsOccupied);
+        Assert.Same(bay, pool.Acquire(Logan));
+    }
+
+    [Fact]
+    public void ObjectPool_ReleasingABayTwiceOrFromAnotherPool_Throws()
+    {
+        var pool = new RepairBayPool();
+        var bay = pool.Acquire(Logan);
+        pool.Release(bay);
+
+        Assert.Throws<InvalidOperationException>(() => pool.Release(bay));
+
+        var foreignBay = new RepairBayPool().Acquire(Logan);
+        Assert.Throws<InvalidOperationException>(() => pool.Release(foreignBay));
     }
 }
