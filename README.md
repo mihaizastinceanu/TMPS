@@ -1,7 +1,7 @@
 # TMPS Laboratory Works
 
-**Course:** TMPS (Software Design Techniques and Mechanisms), Technical University of Moldova (UTM)
-**Author:** Mihail Zastinceanu
+**Course:** TMPS, Technical University of Moldova (UTM)
+**Author:** Mihai Zastinceanu, FAF-243
 **Language / platform:** C# 12, .NET 8
 
 Each laboratory work is on its own branch. The project of each lab is in the root of its branch.
