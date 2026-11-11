@@ -40,7 +40,7 @@ TMPS (branch lab-1)/
 │   │   │   ├── Vehicle.cs
 │   │   │   ├── ServicePackage.cs        Prototype
 │   │   │   ├── ServiceOrder.cs          product of the Builder
-│   │   │   └── RepairBay.cs             object reused by the Object Pool
+│   │   │   └── RepairBay.cs             object reused by the Object Pool (holds an order)
 │   │   ├── Pool/
 │   │   │   └── RepairBayPool.cs         Object Pool
 │   │   ├── Prototype/
@@ -371,13 +371,14 @@ classDiagram
 
 ### 6. Object Pool — `RepairBayPool`
 
-The service center has only **3 repair bays**. A bay is not created for every car: the same 3 `RepairBay` objects are reused. A car takes (`Acquire`) a free bay and gives it back (`Release`) when the repair is done; the bay is reset so the next car gets it clean. If all 3 bays are occupied, the next car **waits** until a bay is released. The waiting is done with a `SemaphoreSlim` that counts the free bays, so the pool is also thread-safe. `Release` checks that the bay belongs to this pool and is not already free. The `RepairBay` constructor is `internal`, so bays are created only by the pool.
+The service center has only **3 repair bays**. A bay is not created for every order: the same 3 `RepairBay` objects are reused. Every order made by the **Builder** takes (`Acquire`) a free bay for its car and gives it back (`Release`) when the repair is done; the bay is reset so the next order gets it clean. If all 3 bays are occupied, the next order **waits** until a bay is released. An order can occupy only one bay at a time. The waiting is done with a `SemaphoreSlim` that counts the free bays, so the pool is also thread-safe. `Release` checks that the bay belongs to this pool and is not already free. The `RepairBay` constructor is `internal`, so bays are created only by the pool.
 
 ```csharp
-public RepairBay Acquire(Vehicle vehicle)
+public RepairBay Acquire(ServiceOrder order)
 {
+    EnsureNotInABay(order);     // one order -> at most one bay
     _available.Wait();          // waits while all bays are occupied
-    return TakeBay(vehicle);
+    return TakeBay(order);
 }
 
 public void Release(RepairBay bay)
@@ -400,12 +401,12 @@ Usage:
 
 ```csharp
 var bays = new RepairBayPool();                 // 3 bays
-var loganBay = bays.Acquire(logan);             // bay 1
-bays.Acquire(corolla);                          // bay 2
-bays.Acquire(focus);                            // bay 3
-var waiting = bays.AcquireAsync(octavia);       // all bays busy -> the car waits
-bays.Release(loganBay);                         // bay 1 is free again
-var octaviaBay = await waiting;                 // Octavia gets bay 1
+var firstBay = bays.Acquire(firstOrder);        // orders built by the Builder -> bay 1
+bays.Acquire(secondOrder);                      // bay 2
+bays.Acquire(thirdOrder);                       // bay 3
+var waiting = bays.AcquireAsync(fourthOrder);   // all bays busy -> the order waits
+bays.Release(firstBay);                         // bay 1 is free again
+var fourthBay = await waiting;                  // order #4 gets bay 1
 ```
 
 UML class diagram:
@@ -421,25 +422,29 @@ classDiagram
         +RepairBayPool(int capacity)
         +int Capacity
         +int FreeBays
-        +Acquire(Vehicle vehicle) RepairBay
-        +AcquireAsync(Vehicle vehicle, CancellationToken token) Task~RepairBay~
+        +Acquire(ServiceOrder order) RepairBay
+        +AcquireAsync(ServiceOrder order, CancellationToken token) Task~RepairBay~
         +Release(RepairBay bay) void
-        -TakeBay(Vehicle vehicle) RepairBay
+        -EnsureNotInABay(ServiceOrder order) void
+        -TakeBay(ServiceOrder order) RepairBay
     }
     class RepairBay {
         +int Number
+        +ServiceOrder? CurrentOrder
         +Vehicle? CurrentVehicle
         +bool IsOccupied
         ~RepairBay(int number)
-        ~Occupy(Vehicle vehicle) void
+        ~Occupy(ServiceOrder order) void
         ~Reset() void
     }
-    class Vehicle
+    class ServiceOrder
+    class ServiceOrderBuilder
     class WorkshopClient
 
     RepairBayPool "1" o-- "3" RepairBay : reuses
-    RepairBay --> "0..1" Vehicle : current car
-    WorkshopClient ..> RepairBayPool : Acquire / Release
+    RepairBay --> "0..1" ServiceOrder : current order
+    ServiceOrderBuilder ..> ServiceOrder : builds
+    WorkshopClient ..> RepairBayPool : Acquire(order) / Release
 ```
 
 
@@ -481,20 +486,28 @@ Order #2 - Toyota Corolla (K XY 777), owner Maria Rusu
   Urgent: +20%
   Total: 3131.40 MDL
 
-Orders in registry: 2
+Order #3 - Ford Focus (B CD 456), owner Elena Ciobanu
+  Brake Pads Replacement: 1140.00 MDL
+  Total: 1140.00 MDL
+
+Order #4 - Skoda Octavia (O EF 789), owner Victor Lungu
+  [package] Basic Maintenance (-10%): 1278.00 MDL
+  Total: 1278.00 MDL
+
+Orders in registry: 4
 
 --- Object Pool ---
 Repair bays: 3, free: 3
-Dacia Logan (C AB 123) -> bay 1
-Toyota Corolla (K XY 777) -> bay 2
-Ford Focus (B CD 456) -> bay 3
+Order #1 Dacia Logan (C AB 123) -> bay 1
+Order #2 Toyota Corolla (K XY 777) -> bay 2
+Order #3 Ford Focus (B CD 456) -> bay 3
 Free bays: 0
-Skoda Octavia (O EF 789) is waiting for a free bay (got one: False)
-Bay 1 finished Dacia Logan (C AB 123) and is released
-Skoda Octavia (O EF 789) -> bay 1
-All cars are done, free bays: 3
+Order #4 Skoda Octavia (O EF 789) is waiting for a free bay (got one: False)
+Bay 1 finished order #1 and is released
+Order #4 Skoda Octavia (O EF 789) -> bay 1
+All orders are done, free bays: 3
 ```
 
-All 15 unit tests pass (`dotnet test`). They check that the Singleton returns the same instance, that each factory creates parts of only one tier, that the factory method creates the right service, that changing a clone does not change the template, that the builder validates the order, and that the object pool has 3 bays, makes the 4th car wait until a bay is released, reuses and resets a released bay and rejects invalid releases.
+All 16 unit tests pass (`dotnet test`). They check that the Singleton returns the same instance, that each factory creates parts of only one tier, that the factory method creates the right service, that changing a clone does not change the template, that the builder validates the order, and that the object pool has 3 bays, makes the 4th order wait until a bay is released, reuses and resets a released bay, does not give two bays to one order and rejects invalid releases.
 
-In this laboratory work I implemented six creational design patterns in a car service center application. Each pattern solves a real problem of the domain: the **Singleton** keeps one registry and unique order numbers, the **Abstract Factory** guarantees that parts of different quality tiers are not mixed, the **Factory Method** lets new service types be added without changing existing code, the **Prototype** makes it cheap to create and customize service packages from templates, the **Builder** makes creating orders with many optional fields readable and safe, and the **Object Pool** manages the 3 repair bays of the workshop, which are reused instead of being created for every car, while extra cars wait for a free bay. The patterns also work together: the creators use the parts factory, the package templates are built with the creators, and the builder takes its order numbers from the singleton.
+In this laboratory work I implemented six creational design patterns in a car service center application. Each pattern solves a real problem of the domain: the **Singleton** keeps one registry and unique order numbers, the **Abstract Factory** guarantees that parts of different quality tiers are not mixed, the **Factory Method** lets new service types be added without changing existing code, the **Prototype** makes it cheap to create and customize service packages from templates, the **Builder** makes creating orders with many optional fields readable and safe, and the **Object Pool** manages the 3 repair bays of the workshop, which are reused instead of being created for every car, while extra orders wait for a free bay. The patterns also work together: the creators use the parts factory, the package templates are built with the creators, the builder takes its order numbers from the singleton, and the orders made by the builder are the ones that occupy the pooled repair bays.

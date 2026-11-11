@@ -1,23 +1,25 @@
 namespace CarServiceCreational.Domain.Models;
 
 /// <summary>
-/// A repair bay in the workshop. Bays are not created per car: they are reused through RepairBayPool.
+/// A repair bay in the workshop where the work of one order is done.
+/// Bays are not created per order: they are reused through RepairBayPool.
 /// </summary>
 public class RepairBay
 {
     public int Number { get; }
-    public Vehicle? CurrentVehicle { get; private set; }
-    public bool IsOccupied => CurrentVehicle is not null;
+    public ServiceOrder? CurrentOrder { get; private set; }
+    public Vehicle? CurrentVehicle => CurrentOrder?.Vehicle;
+    public bool IsOccupied => CurrentOrder is not null;
 
     internal RepairBay(int number)
     {
         Number = number;
     }
 
-    internal void Occupy(Vehicle vehicle) => CurrentVehicle = vehicle;
+    internal void Occupy(ServiceOrder order) => CurrentOrder = order;
 
     /// <summary>
-    /// Clears the bay so the next car gets it in a clean state.
+    /// Clears the bay so the next order gets it in a clean state.
     /// </summary>
-    internal void Reset() => CurrentVehicle = null;
+    internal void Reset() => CurrentOrder = null;
 }

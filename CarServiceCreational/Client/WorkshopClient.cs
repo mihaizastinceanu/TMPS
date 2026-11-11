@@ -63,38 +63,50 @@ public class WorkshopClient
             .MarkUrgent()
             .Build();
 
+        var focus = new Vehicle("Elena Ciobanu", "Ford", "Focus", "B CD 456", 2016);
+        var thirdOrder = new ServiceOrderBuilder()
+            .ForVehicle(focus)
+            .AddService(new BrakeReplacementCreator().PrepareService(aftermarket))
+            .Build();
+
+        var octavia = new Vehicle("Victor Lungu", "Skoda", "Octavia", "O EF 789", 2020);
+        var fourthOrder = new ServiceOrderBuilder()
+            .ForVehicle(octavia)
+            .AddPackage(catalog.Get("Basic Maintenance"))
+            .Build();
+
         PrintOrder(firstOrder);
         PrintOrder(secondOrder);
+        PrintOrder(thirdOrder);
+        PrintOrder(fourthOrder);
 
         Console.WriteLine($"Orders in registry: {registry.Orders.Count}");
         Console.WriteLine();
 
-        // Object Pool: only 3 repair bays, the 4th car waits until one is free
+        // Object Pool: the orders share 3 repair bays, the 4th order waits until one is free
         Console.WriteLine("--- Object Pool ---");
         var bays = new RepairBayPool();
-        var focus = new Vehicle("Elena Ciobanu", "Ford", "Focus", "B CD 456", 2016);
-        var octavia = new Vehicle("Victor Lungu", "Skoda", "Octavia", "O EF 789", 2020);
         Console.WriteLine($"Repair bays: {bays.Capacity}, free: {bays.FreeBays}");
 
-        var loganBay = bays.Acquire(logan);
-        var corollaBay = bays.Acquire(corolla);
-        var focusBay = bays.Acquire(focus);
-        foreach (var bay in new[] { loganBay, corollaBay, focusBay })
-            Console.WriteLine($"{bay.CurrentVehicle!.DisplayName} -> bay {bay.Number}");
+        var firstBay = bays.Acquire(firstOrder);
+        var secondBay = bays.Acquire(secondOrder);
+        var thirdBay = bays.Acquire(thirdOrder);
+        foreach (var bay in new[] { firstBay, secondBay, thirdBay })
+            Console.WriteLine($"Order #{bay.CurrentOrder!.Number} {bay.CurrentVehicle!.DisplayName} -> bay {bay.Number}");
         Console.WriteLine($"Free bays: {bays.FreeBays}");
 
-        var waiting = bays.AcquireAsync(octavia);
-        Console.WriteLine($"{octavia.DisplayName} is waiting for a free bay (got one: {waiting.IsCompleted})");
+        var waiting = bays.AcquireAsync(fourthOrder);
+        Console.WriteLine($"Order #{fourthOrder.Number} {octavia.DisplayName} is waiting for a free bay (got one: {waiting.IsCompleted})");
 
-        Console.WriteLine($"Bay {loganBay.Number} finished {logan.DisplayName} and is released");
-        bays.Release(loganBay);
-        var octaviaBay = waiting.GetAwaiter().GetResult();
-        Console.WriteLine($"{octavia.DisplayName} -> bay {octaviaBay.Number}");
+        Console.WriteLine($"Bay {firstBay.Number} finished order #{firstOrder.Number} and is released");
+        bays.Release(firstBay);
+        var fourthBay = waiting.GetAwaiter().GetResult();
+        Console.WriteLine($"Order #{fourthOrder.Number} {octavia.DisplayName} -> bay {fourthBay.Number}");
 
-        bays.Release(corollaBay);
-        bays.Release(focusBay);
-        bays.Release(octaviaBay);
-        Console.WriteLine($"All cars are done, free bays: {bays.FreeBays}");
+        bays.Release(secondBay);
+        bays.Release(thirdBay);
+        bays.Release(fourthBay);
+        Console.WriteLine($"All orders are done, free bays: {bays.FreeBays}");
     }
 
     private static void PrintOrder(ServiceOrder order)

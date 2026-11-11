@@ -131,6 +131,9 @@ public class CreationalPatternsTests
         Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
+    private static ServiceOrder NewOrder() =>
+        new ServiceOrderBuilder().ForVehicle(Logan).AddService(new EngineDiagnostics()).Build();
+
     [Fact]
     public void ObjectPool_HasThreeBaysByDefault()
     {
@@ -141,14 +144,15 @@ public class CreationalPatternsTests
     }
 
     [Fact]
-    public void ObjectPool_FourthCarWaitsUntilABayIsReleased()
+    public void ObjectPool_FourthOrderWaitsUntilABayIsReleased()
     {
         var pool = new RepairBayPool();
-        var first = pool.Acquire(Logan);
-        pool.Acquire(Logan);
-        pool.Acquire(Logan);
+        var first = pool.Acquire(NewOrder());
+        pool.Acquire(NewOrder());
+        pool.Acquire(NewOrder());
 
-        var waiting = pool.AcquireAsync(Logan);
+        var fourthOrder = NewOrder();
+        var waiting = pool.AcquireAsync(fourthOrder);
         Assert.False(waiting.IsCompleted);
         Assert.Equal(0, pool.FreeBays);
 
@@ -156,31 +160,46 @@ public class CreationalPatternsTests
 
         Assert.True(waiting.Wait(TimeSpan.FromSeconds(1)));
         Assert.Same(first, waiting.Result);
+        Assert.Same(fourthOrder, first.CurrentOrder);
     }
 
     [Fact]
     public void ObjectPool_ReleasedBayIsReusedAndReset()
     {
         var pool = new RepairBayPool(capacity: 1);
-        var bay = pool.Acquire(Logan);
+        var order = NewOrder();
+        var bay = pool.Acquire(order);
+        Assert.Same(order, bay.CurrentOrder);
         Assert.Same(Logan, bay.CurrentVehicle);
 
         pool.Release(bay);
 
         Assert.False(bay.IsOccupied);
-        Assert.Same(bay, pool.Acquire(Logan));
+        Assert.Null(bay.CurrentOrder);
+        Assert.Same(bay, pool.Acquire(NewOrder()));
+    }
+
+    [Fact]
+    public void ObjectPool_OrderCannotTakeTwoBays()
+    {
+        var pool = new RepairBayPool();
+        var order = NewOrder();
+        pool.Acquire(order);
+
+        Assert.Throws<InvalidOperationException>(() => pool.Acquire(order));
+        Assert.Equal(2, pool.FreeBays);
     }
 
     [Fact]
     public void ObjectPool_ReleasingABayTwiceOrFromAnotherPool_Throws()
     {
         var pool = new RepairBayPool();
-        var bay = pool.Acquire(Logan);
+        var bay = pool.Acquire(NewOrder());
         pool.Release(bay);
 
         Assert.Throws<InvalidOperationException>(() => pool.Release(bay));
 
-        var foreignBay = new RepairBayPool().Acquire(Logan);
+        var foreignBay = new RepairBayPool().Acquire(NewOrder());
         Assert.Throws<InvalidOperationException>(() => pool.Release(foreignBay));
     }
 }

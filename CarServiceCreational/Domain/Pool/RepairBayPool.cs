@@ -4,8 +4,8 @@ namespace CarServiceCreational.Domain.Pool;
 
 /// <summary>
 /// Object Pool: the workshop has a fixed number of repair bays (3 by default).
-/// A car takes a free bay and gives it back when the repair is done.
-/// If all bays are busy, the next car waits until one is released.
+/// An order takes a free bay for its car and gives it back when the repair is done.
+/// If all bays are busy, the next order waits until one is released.
 /// </summary>
 public class RepairBayPool
 {
@@ -40,25 +40,27 @@ public class RepairBayPool
     }
 
     /// <summary>
-    /// Takes a free bay for the vehicle. Blocks while all bays are occupied.
+    /// Takes a free bay for the order. Blocks while all bays are occupied.
     /// </summary>
-    public RepairBay Acquire(Vehicle vehicle)
+    public RepairBay Acquire(ServiceOrder order)
     {
+        EnsureNotInABay(order);
         _available.Wait();
-        return TakeBay(vehicle);
+        return TakeBay(order);
     }
 
     /// <summary>
-    /// Same as Acquire, but the car waits without blocking the thread.
+    /// Same as Acquire, but the order waits without blocking the thread.
     /// </summary>
-    public async Task<RepairBay> AcquireAsync(Vehicle vehicle, CancellationToken cancellationToken = default)
+    public async Task<RepairBay> AcquireAsync(ServiceOrder order, CancellationToken cancellationToken = default)
     {
+        EnsureNotInABay(order);
         await _available.WaitAsync(cancellationToken);
-        return TakeBay(vehicle);
+        return TakeBay(order);
     }
 
     /// <summary>
-    /// Returns the bay to the pool, so the next waiting car can use it.
+    /// Returns the bay to the pool, so the next waiting order can use it.
     /// </summary>
     public void Release(RepairBay bay)
     {
@@ -76,12 +78,25 @@ public class RepairBayPool
         _available.Release();
     }
 
-    private RepairBay TakeBay(Vehicle vehicle)
+    /// <summary>
+    /// The car of an order can stand in only one bay at a time.
+    /// </summary>
+    private void EnsureNotInABay(ServiceOrder order)
+    {
+        lock (_lock)
+        {
+            var bay = _allBays.FirstOrDefault(b => b.CurrentOrder == order);
+            if (bay is not null)
+                throw new InvalidOperationException($"Order #{order.Number} is already in bay {bay.Number}.");
+        }
+    }
+
+    private RepairBay TakeBay(ServiceOrder order)
     {
         lock (_lock)
         {
             var bay = _freeBays.Dequeue();
-            bay.Occupy(vehicle);
+            bay.Occupy(order);
             return bay;
         }
     }
