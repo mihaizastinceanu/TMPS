@@ -77,28 +77,22 @@ public class WorkshopClient
         Console.WriteLine("--- Work in the workshop (State + Observer) ---");
         var bays = new RepairBayPool();
 
-        var loganBay = bays.Acquire(logan);
-        loganOrder.StartWork();
-        var corollaBay = bays.Acquire(corolla);
-        corollaOrder.StartWork();
-        var focusBay = bays.Acquire(focus);
-        focusOrder.StartWork();
+        var loganBay = StartInBay(bays, loganOrder);
+        var corollaBay = StartInBay(bays, corollaOrder);
+        var focusBay = StartInBay(bays, focusOrder);
 
         corollaOrder.WaitForParts("OEM brake pads");
         TryAction("Deliver the Corolla now", () => new Cashier(new RegularPricing()).Checkout(corollaOrder));
 
-        loganOrder.FinishWork();
-        bays.Release(loganBay);
+        FinishAndRelease(bays, loganBay);
 
         octaviaOrder.Cancel("the customer changed their mind");
         TryAction("Start work on the cancelled Octavia", octaviaOrder.StartWork);
 
         corollaOrder.PartsArrived();
-        corollaOrder.FinishWork();
-        bays.Release(corollaBay);
+        FinishAndRelease(bays, corollaBay);
 
-        focusOrder.FinishWork();
-        bays.Release(focusBay);
+        FinishAndRelease(bays, focusBay);
         TryAction("Cancel the finished Focus", () => focusOrder.Cancel("too late"));
         Console.WriteLine($"Free repair bays: {bays.FreeBays}/{bays.Capacity}");
         Console.WriteLine();
@@ -122,6 +116,27 @@ public class WorkshopClient
         Console.WriteLine($"Dashboard: {dashboard.History.Count} status changes, " +
                           $"{dashboard.CountIn(OrderStatus.Delivered)} delivered, {dashboard.CountIn(OrderStatus.Cancelled)} cancelled");
         Console.WriteLine($"Accounting: {accounting.Invoices.Count} invoices, revenue {accounting.Revenue:F2} MDL");
+    }
+
+    /// <summary>
+    /// Object Pool + State: the order takes a free repair bay and the work starts.
+    /// </summary>
+    private static RepairBay StartInBay(RepairBayPool bays, ServiceOrder order)
+    {
+        var bay = bays.Acquire(order);
+        Console.WriteLine($"Order #{order.Number} {order.Vehicle.DisplayName} -> bay {bay.Number} (free bays: {bays.FreeBays})");
+        order.StartWork();
+        return bay;
+    }
+
+    /// <summary>
+    /// State + Object Pool: the work is finished and the bay goes back to the pool for the next order.
+    /// </summary>
+    private static void FinishAndRelease(RepairBayPool bays, RepairBay bay)
+    {
+        bay.CurrentOrder!.FinishWork();
+        Console.WriteLine($"Bay {bay.Number} is released (free bays: {bays.FreeBays + 1})");
+        bays.Release(bay);
     }
 
     private static void TryAction(string description, Action action)

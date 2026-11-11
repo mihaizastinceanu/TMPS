@@ -69,7 +69,7 @@ TMPS (branch lab-2)/
 * Observer
 * Strategy
 
-(plus the creational patterns from Lab 1, which are still used to create the orders: Singleton, Builder, Prototype, Factory Method, Abstract Factory, Object Pool)
+(plus the creational patterns from Lab 1, which are still used: Singleton, Builder, Prototype, Factory Method and Abstract Factory create the orders, and the Object Pool gives each order one of the 3 repair bays while it is being worked on)
 
 
 ## Implementation
@@ -379,6 +379,8 @@ sequenceDiagram
     Note over Obs: dashboard logs it,<br/>accounting records the invoice
 ```
 
+When the work starts, the client takes a bay from the Lab 1 Object Pool for the order and then calls `StartWork()`; when the work is finished it calls `FinishWork()` and releases the bay (`Client/WorkshopClient.cs`, methods `StartInBay` and `FinishAndRelease`).
+
 ### Other behavioral patterns (not implemented, short overview)
 
 | Pattern | Idea | Example in this domain |
@@ -417,22 +419,28 @@ Order #3 Ford Focus (B CD 456): Received, 2460.00 MDL
 Order #4 Skoda Octavia (O EF 789): Received, 400.00 MDL
 
 --- Work in the workshop (State + Observer) ---
+Order #1 Dacia Logan (C AB 123) -> bay 1 (free bays: 2)
 [dashboard] Order #1: Received -> InProgress
+Order #2 Toyota Corolla (K XY 777) -> bay 2 (free bays: 1)
 [dashboard] Order #2: Received -> InProgress
+Order #3 Ford Focus (B CD 456) -> bay 3 (free bays: 0)
 [dashboard] Order #3: Received -> InProgress
 [dashboard] Order #2: InProgress -> WaitingForParts (OEM brake pads)
     SMS to Maria Rusu: we are waiting for a part (OEM brake pads), the repair will take longer.
     Deliver the Corolla now: refused - Order #2 is WaitingForParts: cannot deliver the car.
 [dashboard] Order #1: InProgress -> ReadyForPickup
     SMS to Ion Popescu: your Dacia Logan is ready, you can pick it up.
+Bay 1 is released (free bays: 1)
 [dashboard] Order #4: Received -> Cancelled (the customer changed their mind)
     SMS to Victor Lungu: order #4 was cancelled: the customer changed their mind.
     Start work on the cancelled Octavia: refused - Order #4 is Cancelled: cannot start the work.
 [dashboard] Order #2: WaitingForParts -> InProgress
 [dashboard] Order #2: InProgress -> ReadyForPickup
     SMS to Maria Rusu: your Toyota Corolla is ready, you can pick it up.
+Bay 2 is released (free bays: 2)
 [dashboard] Order #3: InProgress -> ReadyForPickup
     SMS to FastTaxi SRL: your Ford Focus is ready, you can pick it up.
+Bay 3 is released (free bays: 3)
     Cancel the finished Focus: refused - Order #3 is ReadyForPickup: cannot cancel the order.
 Free repair bays: 3/3
 
@@ -458,6 +466,6 @@ Accounting: 3 invoices, revenue 5026.05 MDL
 
 The Ford Focus is urgent: 2050.00 MDL + 20% urgent fee = 2460.00 MDL. With the fleet contract the urgent fee (410.00) is removed and 5% of 2050.00 (102.50) is taken off, so the company pays 1947.50 MDL.
 
-All 31 unit tests pass (`dotnet test`): the 15 tests from Lab 1 and 16 new ones. The new tests check that an order follows its whole lifecycle, that forbidden actions (finishing before starting, delivering while waiting for parts, cancelling a finished or cancelled order) are rejected without changing the state, that observers receive every change, that the customer gets an SMS only for important changes, that a detached observer is not notified, that accounting records only delivered orders, and that every pricing strategy calculates the right discount and can be switched at runtime.
+All 32 unit tests pass (`dotnet test`): the 16 tests from Lab 1 and 16 new ones. The new tests check that an order follows its whole lifecycle, that forbidden actions (finishing before starting, delivering while waiting for parts, cancelling a finished or cancelled order) are rejected without changing the state, that observers receive every change, that the customer gets an SMS only for important changes, that a detached observer is not notified, that accounting records only delivered orders, and that every pricing strategy calculates the right discount and can be switched at runtime.
 
-In this laboratory work I extended the car service center from the previous laboratory work with three behavioral design patterns that organize the communication between the objects. The **State** pattern moves the rules of each stage of an order into separate classes, so the order cannot do anything that is not allowed in its current stage and there are no long `switch` statements. The **Observer** pattern lets the customer, the dashboard and accounting react to the changes of an order without the order knowing anything about them, so new observers can be added without changing `ServiceOrder`. The **Strategy** pattern makes the pricing interchangeable: the cashier works with any pricing rule and the rule can be changed for each customer at runtime. The patterns are connected: the creational patterns from Lab 1 create the orders, the cashier (Strategy) delivers the car through the order's state (State), and every transition notifies the observers (Observer).
+In this laboratory work I extended the car service center from the previous laboratory work with three behavioral design patterns that organize the communication between the objects. The **State** pattern moves the rules of each stage of an order into separate classes, so the order cannot do anything that is not allowed in its current stage and there are no long `switch` statements. The **Observer** pattern lets the customer, the dashboard and accounting react to the changes of an order without the order knowing anything about them, so new observers can be added without changing `ServiceOrder`. The **Strategy** pattern makes the pricing interchangeable: the cashier works with any pricing rule and the rule can be changed for each customer at runtime. The patterns are connected: the creational patterns from Lab 1 create the orders, an order takes a repair bay from the Object Pool when the work starts and gives it back when the work is finished, the cashier (Strategy) delivers the car through the order's state (State), and every transition notifies the observers (Observer).
